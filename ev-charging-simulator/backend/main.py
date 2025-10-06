@@ -1,5 +1,3 @@
-
-
 # main.py - IMPROVED AI NAVIGATOR WITH OPTIMAL STATION SELECTION
 import asyncio
 import json
@@ -536,7 +534,7 @@ def initialize_network():
     # Create grid-based normal nodes (7x7 grid for better structure)
     normal_nodes = []
     
-    grid_size = 7  # 7x7 grid
+    grid_size = 10  # 7x7 grid
     lat_start, lat_end = 21.1300, 21.1700
     lon_start, lon_end = 79.0750, 79.1250
     
@@ -658,13 +656,41 @@ simulation_state = {
     "is_location_locked": False
 }
 
+def get_active_route_roads(user_node: str, station_id: str):
+    """Helper function to get active roads for a route"""
+    path = network.find_shortest_path(user_node, station_id)
+    active_roads = []
+    
+    for i in range(len(path) - 1):
+        from_node = path[i]
+        to_node = path[i + 1]
+        
+        # Find the road between these nodes
+        road_key = f"{from_node}-{to_node}"
+        reverse_key = f"{to_node}-{from_node}"
+        
+        road = network.roads.get(road_key) or network.roads.get(reverse_key)
+        
+        if road:
+            active_roads.append({
+                "from": from_node,
+                "to": to_node,
+                "distance": road.distance,
+                "travelTime": road.get_travel_time(),
+                "trafficLevel": road.current_traffic,
+                "isActive": True,  # This marks it as the active route
+                "segmentIndex": i
+            })
+    
+    return active_roads
+
 @app.get("/")
 async def read_root():
     return {"message": "EV Charging Station Simulation API"}
 
 @app.get("/api/network")
 async def get_network():
-    """Return full network data"""
+    """Return full network data - ALL ROADS ARE INACTIVE BY DEFAULT"""
     nodes_data = []
     
     for node_id, node in network.stations.items():
@@ -698,7 +724,8 @@ async def get_network():
                 "to": road.to_station,
                 "distance": road.distance,
                 "trafficLevel": road.current_traffic,
-                "travelTime": road.get_travel_time()
+                "travelTime": road.get_travel_time(),
+                "isActive": False  # CRITICAL: All roads inactive by default
             })
     
     vehicles_data = []
@@ -737,9 +764,13 @@ async def get_recommendations():
         # Get optimal route details
         route_details = ai_engine.get_optimal_route(user_node, rec["station"]["id"])
         
+        # Get active roads for visualization
+        active_roads = get_active_route_roads(user_node, rec["station"]["id"])
+        
         enhanced_rec = {
             **rec,
-            "route": route_details
+            "route": route_details,
+            "active_roads": active_roads  # Add active roads for visualization
         }
         enhanced_recommendations.append(enhanced_rec)
     
@@ -749,6 +780,30 @@ async def get_recommendations():
         "batteryLevel": battery_level,
         "recommendations": enhanced_recommendations,
         "urgency": "critical" if battery_level < 15 else "low" if battery_level < 25 else "normal"
+    }
+
+@app.get("/api/active-route/{station_id}")
+async def get_active_route(station_id: str):
+    """Get active route with highlighted path for visualization"""
+    user_node = simulation_state["user_node"]
+    
+    if station_id not in network.stations:
+        return {"error": "Station not found"}
+    
+    # Get the optimal route
+    route_details = ai_engine.get_optimal_route(user_node, station_id)
+    
+    # Get active roads for the optimal path
+    active_roads = get_active_route_roads(user_node, station_id)
+    
+    return {
+        "station_id": station_id,
+        "user_node": user_node,
+        "path": route_details["path"],
+        "active_roads": active_roads,
+        "total_distance": route_details["total_distance"],
+        "total_time": route_details["total_time"],
+        "waypoints": len(route_details["path"]) - 1
     }
 
 @app.get("/api/optimal-route/{station_id}")
