@@ -1,8 +1,20 @@
-// App.js - COMPLETE UPDATED VERSION WITH ACTIVE ROUTES
-import React, { useState, useEffect, useRef } from 'react';
+// App.js - COMPLETE VERSION WITH SCROLLING FIX
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Battery, Zap, MapPin, Navigation, Clock, Car, AlertCircle, MessageSquare, Send, X, Wifi, Users, Target, ZoomIn, ZoomOut, Move } from 'lucide-react';
 
-// Enhanced Map View Component with Active Route Highlighting
+// Throttle function to limit how often a function can be called
+const throttle = (func, limit) => {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+};
+
+// Enhanced Map View Component with Performance Optimizations
 const MapView = ({ network, userLocation, userNode, recommendations, onLocationSelect, selectedStation }) => {
   const canvasRef = useRef(null);
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
@@ -15,6 +27,25 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
     lastMouseX: 0,
     lastMouseY: 0
   });
+
+
+  // Add scroll prevention - FIXED VERSION
+useEffect(() => {
+  const handleWheel = (e) => {
+    // Only prevent default if we're actually over the canvas
+    const canvas = canvasRef.current;
+    if (canvas && canvas.contains(e.target)) {
+      e.preventDefault();
+    }
+  };
+
+  // Use capture phase to catch the event early
+  document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+  
+  return () => {
+    document.removeEventListener('wheel', handleWheel, { capture: true });
+  };
+}, []);
 
   // Fetch active route when a station is selected
   useEffect(() => {
@@ -37,24 +68,46 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
     const canvas = canvasRef.current;
     if (!canvas) return;
     
+    let animationId;
+    let isMounted = true;
+    let lastRenderTime = 0;
+    const FPS = 60;
+    const frameInterval = 1000 / FPS;
+
     const updateCanvasSize = () => {
+      if (!isMounted) return;
       const container = canvas.parentElement;
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
     };
 
     updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
+    const resizeHandler = throttle(updateCanvasSize, 250);
+    window.addEventListener('resize', resizeHandler);
 
     const ctx = canvas.getContext('2d');
 
-    const animate = () => {
+    const animate = (currentTime) => {
+      if (!isMounted) return;
+      
+      if (currentTime - lastRenderTime < frameInterval) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+      lastRenderTime = currentTime;
+
       const width = canvas.width;
       const height = canvas.height;
 
-      // Clear canvas with transformations - DARKER BACKGROUND
+      if (width === 0 || height === 0) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+
+      // Clear canvas efficiently
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
@@ -64,28 +117,30 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
       ctx.translate(viewState.offsetX, viewState.offsetY);
       ctx.scale(viewState.scale, viewState.scale);
 
-      // Draw grid - DARKER GRID
-      ctx.strokeStyle = '#1a1a1a';
-      ctx.lineWidth = 1 / viewState.scale;
-      const gridSize = 40;
-      for (let i = -Math.abs(viewState.offsetX); i < width * 2; i += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(i, -Math.abs(viewState.offsetY));
-        ctx.lineTo(i, height * 2);
-        ctx.stroke();
-      }
-      for (let i = -Math.abs(viewState.offsetY); i < height * 2; i += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(-Math.abs(viewState.offsetX), i);
-        ctx.lineTo(width * 2, i);
-        ctx.stroke();
+      // Draw grid - only if scale is appropriate
+      if (viewState.scale > 0.3) {
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 1 / viewState.scale;
+        const gridSize = 40;
+        for (let i = -Math.abs(viewState.offsetX); i < width * 2; i += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(i, -Math.abs(viewState.offsetY));
+          ctx.lineTo(i, height * 2);
+          ctx.stroke();
+        }
+        for (let i = -Math.abs(viewState.offsetY); i < height * 2; i += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(-Math.abs(viewState.offsetX), i);
+          ctx.lineTo(width * 2, i);
+          ctx.stroke();
+        }
       }
 
       // Calculate bounds for all stations
       const stations = network.stations || [];
       if (stations.length === 0) {
         ctx.restore();
-        requestAnimationFrame(animate);
+        animationId = requestAnimationFrame(animate);
         return;
       }
 
@@ -113,7 +168,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
             (activeRoad.from === road.from && activeRoad.to === road.to) ||
             (activeRoad.from === road.to && activeRoad.to === road.from)
           );
-          if (isActive) return; // Skip drawing inactive version of active roads
+          if (isActive) return;
         }
 
         const from = network.stations.find(s => s.id === road.from);
@@ -127,9 +182,9 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
         const y2 = toCanvasY(to.location.lat);
 
         // INACTIVE ROAD STYLING - Gray and transparent
-        ctx.strokeStyle = '#374151'; // Dark gray
+        ctx.strokeStyle = '#374151';
         ctx.lineWidth = 2 / viewState.scale;
-        ctx.globalAlpha = 0.3; // Very transparent
+        ctx.globalAlpha = 0.3;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
@@ -151,9 +206,9 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
           const y2 = toCanvasY(to.location.lat);
 
           // ACTIVE ROAD STYLING - Green and prominent
-          ctx.strokeStyle = '#10B981'; // Bright green
-          ctx.lineWidth = 6 / viewState.scale; // Thicker line
-          ctx.globalAlpha = 0.9; // More opaque
+          ctx.strokeStyle = '#10B981';
+          ctx.lineWidth = 6 / viewState.scale;
+          ctx.globalAlpha = 0.9;
           ctx.beginPath();
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
@@ -169,23 +224,25 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
           ctx.stroke();
           ctx.globalAlpha = 1;
 
-          // Add animated dots along the active route
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const steps = Math.floor(distance / 30);
-          
-          for (let i = 0; i < steps; i++) {
-            const progress = ((Date.now() / 1000) * 0.5 + i * 0.2) % 1;
-            const x = x1 + dx * progress;
-            const y = y1 + dy * progress;
+          // Add animated dots along the active route (only if scale is appropriate)
+          if (viewState.scale > 0.5) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const steps = Math.floor(distance / 30);
             
-            ctx.fillStyle = '#10B981';
-            ctx.globalAlpha = 0.8;
-            ctx.beginPath();
-            ctx.arc(x, y, 3 / viewState.scale, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
+            for (let i = 0; i < steps; i++) {
+              const progress = ((Date.now() / 1000) * 0.5 + i * 0.2) % 1;
+              const x = x1 + dx * progress;
+              const y = y1 + dy * progress;
+              
+              ctx.fillStyle = '#10B981';
+              ctx.globalAlpha = 0.8;
+              ctx.beginPath();
+              ctx.arc(x, y, 3 / viewState.scale, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
           }
         });
       }
@@ -209,7 +266,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
           ctx.arc(x, y, 4 / viewState.scale, 0, Math.PI * 2);
           ctx.stroke();
 
-          // Node ID label
+          // Node ID label - only if zoomed in enough
           if (viewState.scale > 0.5) {
             ctx.fillStyle = '#9ca3af';
             ctx.font = `${9 / viewState.scale}px Arial`;
@@ -237,7 +294,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
           if (viewState.scale > 0.3) {
             const gradient = ctx.createRadialGradient(x, y, 0, x, y, isSelected ? 40 / viewState.scale : 25 / viewState.scale);
             if (isSelected) {
-              gradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)'); // Blue glow for selected
+              gradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)');
               gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
             } else if (ratio > 0.6) {
               gradient.addColorStop(0, 'rgba(16, 185, 129, 0.8)');
@@ -256,7 +313,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
           }
 
           // Station circle
-          ctx.fillStyle = isSelected ? '#3b82f6' : // Blue for selected
+          ctx.fillStyle = isSelected ? '#3b82f6' : 
                          ratio > 0.6 ? '#10b981' : 
                          ratio > 0.3 ? '#f59e0b' : '#ef4444';
           ctx.beginPath();
@@ -274,7 +331,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
           ctx.textBaseline = 'middle';
           ctx.fillText('⚡', x, y);
 
-          // Station name
+          // Station name - only if zoomed in enough
           if (viewState.scale > 0.5) {
             ctx.fillStyle = '#ffffff';
             ctx.font = `bold ${isSelected ? 12 : 10 / viewState.scale}px Arial`;
@@ -318,13 +375,20 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
       }
 
       ctx.restore();
-      requestAnimationFrame(animate);
+      
+      if (isMounted) {
+        animationId = requestAnimationFrame(animate);
+      }
     };
 
-    const animationId = requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
+
     return () => {
-      cancelAnimationFrame(animationId);
-      window.removeEventListener('resize', updateCanvasSize);
+      isMounted = false;
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      window.removeEventListener('resize', resizeHandler);
     };
   }, [network, userLocation, userNode, viewState, activeRoute, selectedStation]);
 
@@ -340,7 +404,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
     }
   };
 
-  const handleMouseMove = (event) => {
+  const handleMouseMove = useCallback(throttle((event) => {
     if (viewState.isDragging) {
       const deltaX = event.clientX - viewState.lastMouseX;
       const deltaY = event.clientY - viewState.lastMouseY;
@@ -353,15 +417,26 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
         lastMouseY: event.clientY
       }));
     }
-  };
+  }, 16), [viewState.isDragging, viewState.lastMouseX, viewState.lastMouseY]);
 
   const handleMouseUp = () => {
     setViewState(prev => ({ ...prev, isDragging: false }));
   };
 
-  // Wheel handler for zooming
-  const handleWheel = (event) => {
+  // Wheel handler for zooming with scroll prevention
+  const handleWheel = useCallback(throttle((event) => {
     event.preventDefault();
+    event.stopPropagation();
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    const worldX = (mouseX - viewState.offsetX) / viewState.scale;
+    const worldY = (mouseY - viewState.offsetY) / viewState.scale;
+    
     const zoomFactor = 0.1;
     const newScale = event.deltaY < 0 
       ? viewState.scale * (1 + zoomFactor) 
@@ -369,24 +444,61 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
     
     const clampedScale = Math.max(0.1, Math.min(5, newScale));
     
+    const newOffsetX = mouseX - worldX * clampedScale;
+    const newOffsetY = mouseY - worldY * clampedScale;
+    
     setViewState(prev => ({
       ...prev,
-      scale: clampedScale
+      scale: clampedScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     }));
-  };
+  }, 16), [viewState]);
 
   // Zoom controls
   const zoomIn = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    const worldX = (centerX - viewState.offsetX) / viewState.scale;
+    const worldY = (centerY - viewState.offsetY) / viewState.scale;
+    
+    const newScale = Math.min(5, viewState.scale * 1.2);
+    
+    const newOffsetX = centerX - worldX * newScale;
+    const newOffsetY = centerY - worldY * newScale;
+    
     setViewState(prev => ({
       ...prev,
-      scale: Math.min(5, prev.scale * 1.2)
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     }));
   };
 
   const zoomOut = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    const worldX = (centerX - viewState.offsetX) / viewState.scale;
+    const worldY = (centerY - viewState.offsetY) / viewState.scale;
+    
+    const newScale = Math.max(0.1, viewState.scale * 0.8);
+    
+    const newOffsetX = centerX - worldX * newScale;
+    const newOffsetY = centerY - worldY * newScale;
+    
     setViewState(prev => ({
       ...prev,
-      scale: Math.max(0.1, prev.scale * 0.8)
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     }));
   };
 
@@ -407,11 +519,9 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
-    // Adjust for zoom and pan
     const x = (e.clientX - rect.left - viewState.offsetX) / viewState.scale;
     const y = (e.clientY - rect.top - viewState.offsetY) / viewState.scale;
 
-    // Convert click coordinates to map coordinates
     const stations = network.stations || [];
     const lats = stations.map(s => s.location.lat);
     const lons = stations.map(s => s.location.lon);
@@ -427,7 +537,6 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
     const clickedLon = toMapLon(x);
     const clickedLat = toMapLat(y);
 
-    // Find the closest node
     let closestNode = null;
     let minDistance = Infinity;
 
@@ -450,7 +559,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
   };
 
   return (
-    <div className="relative w-full h-full bg-black rounded-xl overflow-hidden">
+    <div className="relative w-full h-full bg-black rounded-xl overflow-hidden" style={{ touchAction: 'none' }}>
       <canvas 
         ref={canvasRef} 
         className="w-full h-full cursor-grab"
@@ -460,7 +569,10 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        style={{ cursor: viewState.isDragging ? 'grabbing' : (isSelectingLocation ? 'crosshair' : 'grab') }}
+        style={{ 
+          cursor: viewState.isDragging ? 'grabbing' : (isSelectingLocation ? 'crosshair' : 'grab'),
+          touchAction: 'none'
+        }}
       />
       
       {/* Active Route Info */}
@@ -478,7 +590,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
         </div>
       )}
       
-      {/* Map Controls - DARKER */}
+      {/* Map Controls */}
       <div className="absolute top-4 right-4 bg-black/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg border border-gray-800">
         <button
           onClick={() => setIsSelectingLocation(!isSelectingLocation)}
@@ -491,7 +603,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
         </button>
       </div>
 
-      {/* Zoom Controls - DARKER */}
+      {/* Zoom Controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-2">
         <button
           onClick={zoomIn}
@@ -537,7 +649,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
         </div>
       </div>
 
-      {/* Zoom Level Display - DARKER */}
+      {/* Zoom Level Display */}
       <div className="absolute top-16 left-4 bg-black/90 text-white px-3 py-1 rounded-lg text-sm border border-gray-800">
         Zoom: {Math.round(viewState.scale * 100)}%
       </div>
@@ -553,7 +665,7 @@ const MapView = ({ network, userLocation, userNode, recommendations, onLocationS
   );
 };
 
-// Enhanced Graph Visualization Component with Zoom/Pan - DARK THEME
+// Optimized Graph Visualization Component
 const GraphVisualization = ({ network, userLocation, userNode, recommendations }) => {
   const canvasRef = useRef(null);
   const [viewState, setViewState] = useState({
@@ -565,29 +677,69 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
     lastMouseY: 0
   });
 
+ // Add scroll prevention - FIXED VERSION
+useEffect(() => {
+  const handleWheel = (e) => {
+    // Only prevent default if we're actually over the canvas
+    const canvas = canvasRef.current;
+    if (canvas && canvas.contains(e.target)) {
+      e.preventDefault();
+    }
+  };
+
+  // Use capture phase to catch the event early
+  document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+  
+  return () => {
+    document.removeEventListener('wheel', handleWheel, { capture: true });
+  };
+}, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
+    let animationId;
+    let isMounted = true;
+    let lastRenderTime = 0;
+    const FPS = 60;
+    const frameInterval = 1000 / FPS;
+
     const updateCanvasSize = () => {
+      if (!isMounted) return;
       const container = canvas.parentElement;
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
     };
 
     updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
+    const resizeHandler = throttle(updateCanvasSize, 250);
+    window.addEventListener('resize', resizeHandler);
 
     const ctx = canvas.getContext('2d');
 
-    const animate = () => {
+    const animate = (currentTime) => {
+      if (!isMounted) return;
+      
+      if (currentTime - lastRenderTime < frameInterval) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+      lastRenderTime = currentTime;
+
       const width = canvas.width;
       const height = canvas.height;
 
-      // Clear canvas with transformations - DARKER
+      if (width === 0 || height === 0) {
+        animationId = requestAnimationFrame(animate);
+        return;
+      }
+
+      // Clear canvas efficiently
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#050505'; // Even darker
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#050505';
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
 
@@ -599,7 +751,7 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
       const stations = network.stations || [];
       if (stations.length === 0) {
         ctx.restore();
-        requestAnimationFrame(animate);
+        animationId = requestAnimationFrame(animate);
         return;
       }
 
@@ -636,25 +788,28 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
         };
       });
 
-      // Draw roads with optimal path coloring
+      // Draw roads with optimal path coloring - TRANSPARENT NORMAL ROADS
       (network.roads || []).forEach(road => {
         const from = positions[road.from];
         const to = positions[road.to];
         
         if (!from || !to) return;
 
-        // Determine if this road is part of an optimal path
-        let pathColor = '#1f2937'; // Darker gray
+        let isOptimalPath = false;
+        let pathColor = 'transparent'; // Transparent for normal roads
         
         if (pathScores[road.from] || pathScores[road.to]) {
           const fromScore = pathScores[road.from]?.score || 0;
           const toScore = pathScores[road.to]?.score || 0;
           const maxScore = Math.max(fromScore, toScore);
           
-          if (maxScore > 0.8) pathColor = '#10b981';
-          else if (maxScore > 0.6) pathColor = '#22c55e';
-          else if (maxScore > 0.4) pathColor = '#f59e0b';
-          else if (maxScore > 0.2) pathColor = '#ef4444';
+          if (maxScore > 0.2) {
+            isOptimalPath = true;
+            if (maxScore > 0.8) pathColor = '#10b981';
+            else if (maxScore > 0.6) pathColor = '#22c55e';
+            else if (maxScore > 0.4) pathColor = '#f59e0b';
+            else if (maxScore > 0.2) pathColor = '#ef4444';
+          }
         }
 
         const traffic = road.trafficLevel;
@@ -662,24 +817,29 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
         
         if (traffic > 2.0) {
           finalColor = '#ef4444';
-        } else if (traffic > 1.5 && pathColor === '#1f2937') {
+        } else if (traffic > 1.5 && !isOptimalPath) {
           finalColor = '#f59e0b';
         }
 
+        // Skip drawing if it's a transparent normal road
+        if (finalColor === 'transparent') return;
+
         ctx.strokeStyle = finalColor;
-        ctx.lineWidth = Math.max(2, 8 / traffic) / viewState.scale;
+        ctx.lineWidth = Math.max(1, 6 / traffic) / viewState.scale;
         ctx.globalAlpha = 0.8;
+        
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
         ctx.lineTo(to.x, to.y);
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // Add animated particles for optimal paths
-        if (pathColor !== '#1f2937' && viewState.scale > 0.5) {
+        // Add animated particles only for optimal paths
+        if (isOptimalPath && viewState.scale > 0.5) {
           const dx = to.x - from.x;
           const dy = to.y - from.y;
-          const steps = 6;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const steps = Math.max(3, Math.floor(distance / 40));
           
           for (let i = 0; i < steps; i++) {
             const t = ((Date.now() / 1000 + i / steps) % 1);
@@ -687,9 +847,9 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
             const y = from.y + dy * t;
             
             ctx.fillStyle = pathColor;
-            ctx.globalAlpha = 0.7;
+            ctx.globalAlpha = 0.8;
             ctx.beginPath();
-            ctx.arc(x, y, 3 / viewState.scale, 0, Math.PI * 2);
+            ctx.arc(x, y, 2 / viewState.scale, 0, Math.PI * 2);
             ctx.fill();
             ctx.globalAlpha = 1;
           }
@@ -705,11 +865,10 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
           const total = station.totalPoints;
           const ratio = available / total;
 
-          // Check if this is a recommended station
           const pathInfo = pathScores[station.id];
           const isRecommended = !!pathInfo;
 
-          // EV Station glow with recommendation color
+          // EV Station glow
           if (viewState.scale > 0.3) {
             const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 35 / viewState.scale);
             if (isRecommended) {
@@ -742,16 +901,20 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
           ctx.lineWidth = 3 / viewState.scale;
           ctx.stroke();
 
+          // Charging icon
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${14 / viewState.scale}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('⚡', pos.x, pos.y);
+
           // Station info
           if (viewState.scale > 0.5) {
             ctx.fillStyle = '#ffffff';
-            ctx.font = `bold ${12 / viewState.scale}px Arial`;
+            ctx.font = `bold ${10 / viewState.scale}px Arial`;
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(station.id, pos.x, pos.y - 6 / viewState.scale);
-            
-            ctx.font = `${10 / viewState.scale}px Arial`;
-            ctx.fillText(`${available}/${total}`, pos.x, pos.y + 8 / viewState.scale);
+            ctx.textBaseline = 'top';
+            ctx.fillText(`${available}/${total}`, pos.x, pos.y + 15 / viewState.scale);
           }
 
           // Recommendation badge
@@ -762,24 +925,27 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
             ctx.fill();
             
             ctx.fillStyle = '#ffffff';
-            ctx.font = `bold ${8 / viewState.scale}px Arial`;
-            ctx.fillText(`${pathInfo.rank + 1}`, pos.x + 15 / viewState.scale, pos.y - 14 / viewState.scale);
+            ctx.font = `bold ${7 / viewState.scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${pathInfo.rank + 1}`, pos.x + 15 / viewState.scale, pos.y - 15 / viewState.scale);
           }
         } else {
-          // Normal node (smaller)
-          ctx.fillStyle = '#4b5563'; // Darker gray
+          // Normal node
+          ctx.fillStyle = '#4b5563';
+          ctx.globalAlpha = 0.7;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y, 10 / viewState.scale, 0, Math.PI * 2);
+          ctx.arc(pos.x, pos.y, 8 / viewState.scale, 0, Math.PI * 2);
           ctx.fill();
+          ctx.globalAlpha = 1;
 
-          ctx.strokeStyle = '#6b7280'; // Darker border
-          ctx.lineWidth = 2 / viewState.scale;
+          ctx.strokeStyle = '#6b7280';
+          ctx.lineWidth = 1.5 / viewState.scale;
           ctx.stroke();
 
-          // Node ID
-          if (viewState.scale > 0.5) {
-            ctx.fillStyle = '#d1d5db'; // Lighter text for contrast
-            ctx.font = `bold ${10 / viewState.scale}px Arial`;
+          if (viewState.scale > 0.8) {
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = `bold ${9 / viewState.scale}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(station.id, pos.x, pos.y);
@@ -791,7 +957,6 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
       if (positions[userNode]) {
         const pos = positions[userNode];
         
-        // User location pulse effect
         const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7;
         const userGradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 25 * pulse / viewState.scale);
         userGradient.addColorStop(0, 'rgba(236, 72, 153, 0.8)');
@@ -802,7 +967,7 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
 
         ctx.fillStyle = '#ec4899';
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 8 / viewState.scale, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 10 / viewState.scale, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = '#ffffff';
@@ -817,18 +982,24 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
       }
 
       ctx.restore();
-
-      requestAnimationFrame(animate);
+      
+      if (isMounted) {
+        animationId = requestAnimationFrame(animate);
+      }
     };
 
-    const animationId = requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
+
     return () => {
-      cancelAnimationFrame(animationId);
-      window.removeEventListener('resize', updateCanvasSize);
+      isMounted = false;
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      window.removeEventListener('resize', resizeHandler);
     };
   }, [network, userLocation, userNode, recommendations, viewState]);
 
-  // Mouse event handlers for panning
+  // Mouse event handlers
   const handleMouseDown = (event) => {
     if (event.button === 0) {
       setViewState(prev => ({
@@ -840,7 +1011,7 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
     }
   };
 
-  const handleMouseMove = (event) => {
+  const handleMouseMove = useCallback(throttle((event) => {
     if (viewState.isDragging) {
       const deltaX = event.clientX - viewState.lastMouseX;
       const deltaY = event.clientY - viewState.lastMouseY;
@@ -853,15 +1024,26 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
         lastMouseY: event.clientY
       }));
     }
-  };
+  }, 16), [viewState.isDragging, viewState.lastMouseX, viewState.lastMouseY]);
 
   const handleMouseUp = () => {
     setViewState(prev => ({ ...prev, isDragging: false }));
   };
 
-  // Wheel handler for zooming
-  const handleWheel = (event) => {
+  // Wheel handler for zooming with scroll prevention
+  const handleWheel = useCallback(throttle((event) => {
     event.preventDefault();
+    event.stopPropagation();
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    const worldX = (mouseX - viewState.offsetX) / viewState.scale;
+    const worldY = (mouseY - viewState.offsetY) / viewState.scale;
+    
     const zoomFactor = 0.1;
     const newScale = event.deltaY < 0 
       ? viewState.scale * (1 + zoomFactor) 
@@ -869,24 +1051,60 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
     
     const clampedScale = Math.max(0.1, Math.min(5, newScale));
     
+    const newOffsetX = mouseX - worldX * clampedScale;
+    const newOffsetY = mouseY - worldY * clampedScale;
+    
     setViewState(prev => ({
       ...prev,
-      scale: clampedScale
+      scale: clampedScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     }));
-  };
+  }, 16), [viewState]);
 
-  // Zoom controls
   const zoomIn = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    const worldX = (centerX - viewState.offsetX) / viewState.scale;
+    const worldY = (centerY - viewState.offsetY) / viewState.scale;
+    
+    const newScale = Math.min(5, viewState.scale * 1.2);
+    
+    const newOffsetX = centerX - worldX * newScale;
+    const newOffsetY = centerY - worldY * newScale;
+    
     setViewState(prev => ({
       ...prev,
-      scale: Math.min(5, prev.scale * 1.2)
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     }));
   };
 
   const zoomOut = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    const worldX = (centerX - viewState.offsetX) / viewState.scale;
+    const worldY = (centerY - viewState.offsetY) / viewState.scale;
+    
+    const newScale = Math.max(0.1, viewState.scale * 0.8);
+    
+    const newOffsetX = centerX - worldX * newScale;
+    const newOffsetY = centerY - worldY * newScale;
+    
     setViewState(prev => ({
       ...prev,
-      scale: Math.max(0.1, prev.scale * 0.8)
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     }));
   };
 
@@ -902,7 +1120,7 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
   };
 
   return (
-    <div className="relative w-full h-full bg-black rounded-xl overflow-hidden">
+    <div className="relative w-full h-full bg-black rounded-xl overflow-hidden" style={{ touchAction: 'none' }}>
       <canvas 
         ref={canvasRef} 
         className="w-full h-full cursor-grab"
@@ -911,10 +1129,13 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        style={{ cursor: viewState.isDragging ? 'grabbing' : 'grab' }}
+        style={{ 
+          cursor: viewState.isDragging ? 'grabbing' : 'grab',
+          touchAction: 'none'
+        }}
       />
       
-      {/* Graph Info - DARKER */}
+      {/* Graph Info */}
       <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg border border-gray-800">
         <div className="text-xs space-y-2">
           <div className="flex items-center gap-2">
@@ -933,14 +1154,10 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
             <div className="w-3 h-1 bg-red-500"></div>
             <span>Poor Path</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-1 bg-gray-600"></div>
-            <span>Normal Road</span>
-          </div>
         </div>
       </div>
 
-      {/* Zoom Controls - DARKER */}
+      {/* Zoom Controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-2">
         <button
           onClick={zoomIn}
@@ -965,7 +1182,7 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
         </button>
       </div>
 
-      {/* Zoom Level Display - DARKER */}
+      {/* Zoom Level Display */}
       <div className="absolute bottom-4 left-4 bg-black/90 text-white px-3 py-1 rounded-lg text-sm border border-gray-800">
         Zoom: {Math.round(viewState.scale * 100)}%
       </div>
@@ -973,7 +1190,7 @@ const GraphVisualization = ({ network, userLocation, userNode, recommendations }
   );
 };
 
-// AI Chat Component - DARK THEME
+// AI Chat Component
 const AIChat = ({ isOpen, onClose, chatMessages, userInput, setUserInput, onSend }) => {
   if (!isOpen) return null;
 
@@ -1036,7 +1253,7 @@ const AIChat = ({ isOpen, onClose, chatMessages, userInput, setUserInput, onSend
   );
 };
 
-// Main Component with DARK THEME
+// Main Component with Performance Optimizations
 const EVChargingApp = () => {
   const [network, setNetwork] = useState({ stations: [], roads: [], vehicles: [] });
   const [currentView, setCurrentView] = useState('map');
@@ -1052,8 +1269,26 @@ const EVChargingApp = () => {
   const [userInput, setUserInput] = useState('');
   const [ws, setWs] = useState(null);
 
-  // WebSocket connection
+  // Optimized WebSocket connection with throttling
   useEffect(() => {
+    const throttledSetNetwork = throttle((data) => {
+      setNetwork(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(data)) {
+          return prev;
+        }
+        return data;
+      });
+    }, 100);
+
+    const throttledSetRecommendations = throttle((data) => {
+      setRecommendations(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(data.recommendations)) {
+          return prev;
+        }
+        return data.recommendations;
+      });
+    }, 100);
+
     const websocket = new WebSocket('ws://localhost:8000/ws');
     
     websocket.onopen = () => {
@@ -1068,8 +1303,8 @@ const EVChargingApp = () => {
           setUserBattery(data.batteryLevel);
           setUserLocation(data.userLocation);
           setUserNode(data.userNode);
-          setNetwork(data.network);
-          setRecommendations(data.recommendations);
+          throttledSetNetwork(data.network);
+          throttledSetRecommendations(data);
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -1094,12 +1329,17 @@ const EVChargingApp = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const networkResponse = await fetch('http://localhost:8000/api/network');
-        const networkData = await networkResponse.json();
-        setNetwork(networkData);
+        const [networkResponse, recommendationsResponse] = await Promise.all([
+          fetch('http://localhost:8000/api/network'),
+          fetch('http://localhost:8000/api/recommendations')
+        ]);
 
-        const recommendationsResponse = await fetch('http://localhost:8000/api/recommendations');
-        const recommendationsData = await recommendationsResponse.json();
+        const [networkData, recommendationsData] = await Promise.all([
+          networkResponse.json(),
+          recommendationsResponse.json()
+        ]);
+
+        setNetwork(networkData);
         setRecommendations(recommendationsData.recommendations);
         setUserLocation(recommendationsData.userLocation);
         setUserNode(recommendationsData.userNode);
@@ -1243,9 +1483,9 @@ const EVChargingApp = () => {
             </div>
           )}
 
-          {/* Improved Main Content Layout - DARKER */}
+          {/* Main Content Layout */}
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 p-6 bg-gradient-to-br from-gray-900 to-gray-800">
-            {/* Sidebar - Smaller width */}
+            {/* Sidebar */}
             <div className="xl:col-span-1 space-y-4">
               <div className={`bg-gradient-to-br ${getBatteryColor(userBattery)} rounded-2xl p-6 text-white shadow-xl border border-gray-700`}>
                 <div className="flex items-center gap-2 mb-4">
@@ -1334,9 +1574,9 @@ const EVChargingApp = () => {
               </div>
             </div>
 
-            {/* Main Content Area - Larger width */}
+            {/* Main Content Area */}
             <div className="xl:col-span-4 space-y-4">
-              {/* Map/Graph View - Much larger */}
+              {/* Map/Graph View */}
               <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-1 border border-gray-700 h-[70vh] min-h-[600px] overflow-hidden">
                 {currentView === 'map' ? (
                   <MapView 
@@ -1357,7 +1597,7 @@ const EVChargingApp = () => {
                 )}
               </div>
 
-              {/* AI Recommendations - DARKER */}
+              {/* AI Recommendations */}
               <div className="bg-gradient-to-br from-emerald-600/20 to-cyan-600/20 backdrop-blur-sm rounded-2xl p-4 border border-emerald-500/30">
                 <div className="flex items-center gap-2 mb-3">
                   <Navigation className="w-6 h-6 text-emerald-400" />

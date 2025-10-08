@@ -313,7 +313,7 @@ class SmartRoutingAI:
         if total_points > 0:
             availability_ratio = available / total_points
             # Exponential scoring to strongly favor stations with more available chargers
-            availability_score = availability_ratio ** 0.9 # Exponential favor for higher availability
+            availability_score = availability_ratio ** 0.3 # Exponential favor for higher availability
         else:
             availability_score = 0
         
@@ -343,13 +343,13 @@ class SmartRoutingAI:
         # URGENCY-BASED WEIGHT ADJUSTMENT
         if user_battery < 15:  # Critical battery
             # Emergency mode: prioritize availability and distance equally
-            weights = [0.40, 0.40, 0.15, 0.05, 0.00]
+            weights = [0.10, 0.40, 0.15, 0.05, 0.00]
         elif user_battery < 25:  # Low battery
             # Priority mode: balance availability and distance
-            weights = [0.35, 0.35, 0.20, 0.08, 0.02]
+            weights = [0.15, 0.35, 0.20, 0.08, 0.02]
         else:  # Normal battery
             # Normal mode: balanced approach
-            weights = [0.35, 0.30, 0.20, 0.10, 0.05]
+            weights = [0.25, 0.30, 0.20, 0.10, 0.05]
         
         # Calculate final score
         final_score = (
@@ -499,124 +499,218 @@ network = EVChargingNetwork()
 ai_engine = SmartRoutingAI(network)
 
 def initialize_network():
-    print("Initializing proper grid-based network...")
+    print("Initializing network with PROPER nearby connections...")
     
-    # Create 15 EV Stations
+    # Create 20 EV Stations with increased spacing
     ev_stations = [
-        # Central area (closer stations)
-        ChargingStation('S1', 'Downtown PowerHub', 21.1520, 79.0980, 8, 4, 4, 3, 3),
-        ChargingStation('S2', 'Central Plaza Charge', 21.1500, 79.1020, 6, 3, 3, 4, 4),
-        ChargingStation('S3', 'Metro Station EV', 21.1480, 79.1000, 10, 5, 5, 3, 5),
+        # Central area (spaced out more)
+        ChargingStation('S1', 'Downtown PowerHub', 21.1520, 79.0950, 8, 4, 4),
+        ChargingStation('S2', 'Central Plaza Charge', 21.1500, 79.1050, 6, 3, 3),
+        ChargingStation('S3', 'Metro Station EV', 21.1480, 79.1000, 10, 5, 5),
         
-        # Northern area
-        ChargingStation('S4', 'Northgate Charging', 21.1620, 79.0950, 6, 3, 3, 2, 1),
-        ChargingStation('S5', 'University Power', 21.1580, 79.0900, 8, 4, 4, 1, 2),
+        # Northern area (spread further north)
+        ChargingStation('S4', 'Northgate Charging', 21.1650, 79.0950, 6, 3, 3),
+        ChargingStation('S5', 'University Power', 21.1620, 79.0900, 8, 4, 4),
+        ChargingStation('S16', 'North Hills EV', 21.1680, 79.0850, 7, 3, 4),
         
-        # Southern area
-        ChargingStation('S6', 'Southside Charge', 21.1420, 79.1000, 7, 3, 4, 4, 6),
-        ChargingStation('S7', 'Mall Parking EV', 21.1400, 79.0950, 9, 5, 4, 2, 7),
+        # Southern area (spread further south)
+        ChargingStation('S6', 'Southside Charge', 21.1380, 79.1000, 7, 3, 4),
+        ChargingStation('S7', 'Mall Parking EV', 21.1350, 79.0950, 9, 5, 4),
+        ChargingStation('S17', 'South Point EV', 21.1320, 79.1050, 6, 3, 3),
         
-        # Eastern area
-        ChargingStation('S8', 'Eastgate Power', 21.1500, 79.1150, 8, 4, 4, 6, 4),
-        ChargingStation('S9', 'Highway East EV', 21.1450, 79.1200, 12, 8, 4, 7, 5),
+        # Eastern area (spread further east)
+        ChargingStation('S8', 'Eastgate Power', 21.1500, 79.1200, 8, 4, 4),
+        ChargingStation('S9', 'Highway East EV', 21.1450, 79.1250, 12, 8, 4),
+        ChargingStation('S18', 'East Valley EV', 21.1420, 79.1180, 7, 3, 4),
         
-        # Western area
-        ChargingStation('S10', 'Westgate Charging', 21.1500, 79.0850, 7, 3, 4, 1, 4),
-        ChargingStation('S11', 'Old Town EV', 21.1480, 79.0800, 5, 2, 3, 0, 5),
+        # Western area (spread further west)
+        ChargingStation('S10', 'Westgate Charging', 21.1500, 79.0800, 7, 3, 4),
+        ChargingStation('S11', 'Old Town EV', 21.1480, 79.0750, 5, 2, 3),
+        ChargingStation('S19', 'West Hills EV', 21.1550, 79.0700, 8, 4, 4),
         
-        # Additional stations
-        ChargingStation('S12', 'Airport EV Zone', 21.1650, 79.1050, 10, 6, 4, 5, 1),
-        ChargingStation('S13', 'Stadium Charge', 21.1600, 79.1100, 8, 4, 4, 6, 2),
-        ChargingStation('S14', 'Hospital EV', 21.1550, 79.1150, 6, 3, 3, 5, 3),
-        ChargingStation('S15', 'Business Park', 21.1350, 79.0900, 8, 4, 4, 1, 7),
+        # Additional stations (more spread out)
+        ChargingStation('S12', 'Airport EV Zone', 21.1680, 79.1100, 10, 6, 4),
+        ChargingStation('S13', 'Stadium Charge', 21.1630, 79.1150, 8, 4, 4),
+        ChargingStation('S14', 'Hospital EV', 21.1580, 79.1200, 6, 3, 3),
+        ChargingStation('S15', 'Business Park', 21.1320, 79.0850, 8, 4, 4),
+        ChargingStation('S20', 'Lakeview EV', 21.1420, 79.0900, 7, 3, 4),
     ]
     
-    # Create grid-based normal nodes (7x7 grid for better structure)
+    # Create normal nodes in clusters around EV stations
     normal_nodes = []
-    
-    grid_size = 10  # 7x7 grid
-    lat_start, lat_end = 21.1300, 21.1700
-    lon_start, lon_end = 79.0750, 79.1250
-    
-    lat_step = (lat_end - lat_start) / (grid_size - 1)
-    lon_step = (lon_end - lon_start) / (grid_size - 1)
-    
     node_counter = 1
     
-    # Create grid nodes
-    for i in range(grid_size):
-        for j in range(grid_size):
-            # Add some randomness to make it look more natural
-            lat_variation = random.uniform(-0.001, 0.001)
-            lon_variation = random.uniform(-0.001, 0.001)
-            
-            lat = lat_start + i * lat_step + lat_variation
-            lon = lon_start + j * lon_step + lon_variation
+    # Create MORE clusters of normal nodes around each EV station
+    for ev_station in ev_stations:
+        # Each EV station gets 5-8 nearby normal nodes (increased from 3-5)
+        num_nodes = random.randint(5, 8)
+        for i in range(num_nodes):
+            # Create nodes within 1-2.5 km of the EV station (slightly tighter cluster)
+            lat_variation = random.uniform(-0.015, 0.015)  # ~1.5km variation
+            lon_variation = random.uniform(-0.015, 0.015)  # ~1.5km variation
             
             node_id = f"N{node_counter}"
-            normal_nodes.append(RoadNode(node_id, lat, lon, j, i))
+            normal_nodes.append(RoadNode(
+                node_id, 
+                ev_station.location["lat"] + lat_variation,
+                ev_station.location["lon"] + lon_variation
+            ))
+            node_counter += 1
+    
+    # Add MORE additional random nodes for better connectivity
+    for i in range(100):  # Increased from 20 to 40
+        node_id = f"R{i+1}"
+        # Place in wider central area
+        lat = 21.15 + random.uniform(-0.04, 0.04)  # Increased spread
+        lon = 79.10 + random.uniform(-0.04, 0.04)  # Increased spread
+        normal_nodes.append(RoadNode(node_id, lat, lon))
+    
+    # Add connecting nodes between EV clusters
+    for i in range(30):  # New: nodes that bridge between EV stations
+        # Choose two random EV stations and place nodes between them
+        if len(ev_stations) >= 2:
+            ev1, ev2 = random.sample(ev_stations, 2)
+            # Place node roughly midway between them
+            mid_lat = (ev1.location["lat"] + ev2.location["lat"]) / 2
+            mid_lon = (ev1.location["lon"] + ev2.location["lon"]) / 2
+            # Add some variation
+            lat = mid_lat + random.uniform(-0.01, 0.01)
+            lon = mid_lon + random.uniform(-0.01, 0.01)
+            
+            node_id = f"C{node_counter}"
+            normal_nodes.append(RoadNode(node_id, lat, lon))
             node_counter += 1
     
     print(f"Created {len(ev_stations)} EV stations and {len(normal_nodes)} normal nodes")
     
     # Add all stations and nodes to network
+    all_nodes = []
     for station in ev_stations:
         network.add_station(station)
+        all_nodes.append(station)
     
     for node in normal_nodes:
         network.add_station(node)
+        all_nodes.append(node)
     
-    # Create proper grid connections (like a real map)
-    all_nodes = {**{s.id: s for s in ev_stations}, **{n.id: n for n in normal_nodes}}
+    print("Creating PROPER nearby connections (max 3km)...")
     
-    # Connect nodes in grid pattern (each node connects to neighbors)
-    for node_id, node in all_nodes.items():
-        current_x = node.grid_x
-        current_y = node.grid_y
+    # Connect each node only to VERY nearby nodes
+    connection_count = 0
+    for i, node in enumerate(all_nodes):
+        nearby_nodes = []
         
-        # Define possible neighbors (right, left, down, up)
-        neighbors = [
-            (current_x + 1, current_y),  # right
-            (current_x - 1, current_y),  # left  
-            (current_x, current_y + 1),  # down
-            (current_x, current_y - 1),  # up
-        ]
+        # Find all nodes within 3km
+        for other_node in all_nodes:
+            if other_node.id != node.id:
+                distance = network.calculate_distance(node.location, other_node.location)
+                if distance <= 3.0:  # Only connect to nodes within 3km
+                    nearby_nodes.append((other_node, distance))
         
-        # Also add diagonal connections for more natural map (optional)
-        if random.random() > 0.7:  # 30% chance for diagonal connections
-            neighbors.extend([
-                (current_x + 1, current_y + 1),  # down-right
-                (current_x - 1, current_y + 1),  # down-left
-            ])
+        # Sort by distance and connect to the closest 3-5 nodes (increased from 2-4)
+        nearby_nodes.sort(key=lambda x: x[1])
         
+        max_connections = min(random.randint(3, 5), len(nearby_nodes))
         connected_count = 0
-        max_connections = random.randint(2, 4)  # Each node connects to 2-4 neighbors
         
-        for nx, ny in neighbors:
+        for other_node, distance in nearby_nodes:
             if connected_count >= max_connections:
                 break
                 
-            # Find node at this grid position
-            neighbor_node = next((n for n in all_nodes.values() if n.grid_x == nx and n.grid_y == ny), None)
+            # Check if road already exists
+            road_key = f"{node.id}-{other_node.id}"
+            reverse_key = f"{other_node.id}-{node.id}"
             
-            if neighbor_node and neighbor_node.id != node_id:
-                # Check if road already exists
-                road_key = f"{node_id}-{neighbor_node.id}"
-                reverse_key = f"{neighbor_node.id}-{node_id}"
+            if road_key not in network.roads and reverse_key not in network.roads:
+                # Realistic traffic based on location type
+                if hasattr(node, 'is_ev_station') and node.is_ev_station:
+                    base_traffic = 1.2 + random.uniform(-0.1, 0.3)  # EV stations have more traffic
+                else:
+                    base_traffic = 1.0 + random.uniform(-0.2, 0.2)
                 
-                if road_key not in network.roads and reverse_key not in network.roads:
-                    distance = network.calculate_distance(node.location, neighbor_node.location)
-                    # Add some traffic variation based on location
-                    base_traffic = 1.0 + random.uniform(-0.2, 0.3)
+                network.add_road(node.id, other_node.id, distance, base_traffic)
+                connection_count += 1
+                connected_count += 1
+    
+    print(f"Created {connection_count} connections (average {connection_count/len(all_nodes):.1f} per node)")
+    
+    # Verify connectivity - test if nearby EV stations are actually connected
+    print("\n=== CONNECTIVITY VERIFICATION ===")
+    
+    # Test some sample locations
+    test_locations = [
+        ('S1', 'Downtown Area'),
+        ('S10', 'Westgate Area'), 
+        ('S8', 'Eastgate Area'),
+        ('S16', 'North Hills Area'),
+        ('S17', 'South Point Area'),
+        ('N1', 'Random Node 1'),
+        ('R1', 'Random Node 2'),
+        ('C1', 'Connecting Node 1')
+    ]
+    
+    for test_node_id, area_name in test_locations:
+        if test_node_id in network.stations:
+            test_node = network.stations[test_node_id]
+            
+            # Find closest EV stations by straight-line distance
+            ev_distances = []
+            for station_id, station in network.stations.items():
+                if hasattr(station, 'is_ev_station') and station.is_ev_station and station_id != test_node_id:
+                    distance = network.calculate_distance(test_node.location, station.location)
+                    ev_distances.append((station_id, distance, station.name))
+            
+            ev_distances.sort(key=lambda x: x[1])
+            
+            print(f"\n{area_name} ({test_node_id}) - Nearby EV Stations:")
+            
+            # Check connectivity to 3 closest EV stations
+            for station_id, straight_distance, station_name in ev_distances[:3]:
+                path = network.find_shortest_path(test_node_id, station_id)
+                
+                if len(path) > 1:
+                    # Calculate actual path distance
+                    path_distance = 0
+                    for i in range(len(path) - 1):
+                        road_key = f"{path[i]}-{path[i+1]}"
+                        if road_key in network.roads:
+                            path_distance += network.roads[road_key].distance
                     
-                    network.add_road(node_id, neighbor_node.id, distance, base_traffic)
-                    connected_count += 1
+                    # Calculate efficiency (path_distance / straight_distance)
+                    efficiency = path_distance / straight_distance if straight_distance > 0 else 1.0
+                    
+                    status = "✅ DIRECT" if len(path) == 2 else f"✅ {len(path)-1} hops"
+                    
+                    print(f"  {station_name}: {straight_distance:.1f}km straight → {path_distance:.1f}km route "
+                          f"({efficiency:.1f}x) {status}")
+                else:
+                    print(f"  {station_name}: {straight_distance:.1f}km straight → ❌ NO PATH")
     
-    print(f"Network created with {len(network.roads)//2} roads (proper grid structure)")
+    # Check if we have a fully connected network
+    disconnected_nodes = 0
+    for node_id in network.stations:
+        # Try to find path to a central node
+        path = network.find_shortest_path(node_id, 'S1')
+        if len(path) == 1:  # Only contains start node
+            disconnected_nodes += 1
     
-    # Verify connectivity
-    test_path = network.find_shortest_path('N1', 'S1')
-    print(f"Test path from N1 to S1: {len(test_path)} nodes")
+    print(f"\nNetwork Status: {len(network.stations) - disconnected_nodes}/{len(network.stations)} nodes connected")
+    
+    # Calculate average distance between EV stations
+    print(f"\n=== EV STATION SPACING ===")
+    total_distance = 0
+    count = 0
+    for i, ev1 in enumerate(ev_stations):
+        for j, ev2 in enumerate(ev_stations):
+            if i < j:
+                distance = network.calculate_distance(ev1.location, ev2.location)
+                total_distance += distance
+                count += 1
+    
+    if count > 0:
+        avg_distance = total_distance / count
+        print(f"Average distance between EV stations: {avg_distance:.1f} km")
+        print(f"EV station density: {len(ev_stations)} stations across ~{(avg_distance * math.sqrt(len(ev_stations))):.1f} km area")
     
     return True
 
