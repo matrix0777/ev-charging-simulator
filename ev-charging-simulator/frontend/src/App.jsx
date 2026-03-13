@@ -50,7 +50,7 @@ useEffect(() => {
   // Fetch active route when a station is selected
   useEffect(() => {
     if (selectedStation) {
-      fetch(`http://localhost:8000/api/active-route/${selectedStation.id}`)
+      fetch(`http://ev-charging-simulator-1.onrender.com/api/active-route/${selectedStation.id}`)
         .then(response => response.json())
         .then(data => {
           setActiveRoute(data);
@@ -1289,7 +1289,7 @@ const EVChargingApp = () => {
       });
     }, 100);
 
-    const websocket = new WebSocket('ws://localhost:8000/ws');
+    const websocket = new WebSocket('ws://ev-charging-simulator-1.onrender.com/ws');
     
     websocket.onopen = () => {
       console.log('WebSocket connected');
@@ -1330,8 +1330,8 @@ const EVChargingApp = () => {
     const fetchInitialData = async () => {
       try {
         const [networkResponse, recommendationsResponse] = await Promise.all([
-          fetch('http://localhost:8000/api/network'),
-          fetch('http://localhost:8000/api/recommendations')
+          fetch('http://ev-charging-simulator-1.onrender.com/api/network'),
+          fetch('http://ev-charging-simulator-1.onrender.com/api/recommendations')
         ]);
 
         const [networkData, recommendationsData] = await Promise.all([
@@ -1354,7 +1354,7 @@ const EVChargingApp = () => {
 
   const handleLocationSelect = async (nodeId) => {
     try {
-      const response = await fetch('http://localhost:8000/api/set-location', {
+      const response = await fetch('http://ev-charging-simulator-1.onrender.com/api/set-location', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1390,7 +1390,7 @@ const EVChargingApp = () => {
     setUserInput('');
     
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch('http://ev-charging-simulator-1.onrender.com/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
