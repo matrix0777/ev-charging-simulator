@@ -1,4 +1,14 @@
-const API_BASE_URL = 'http://localhost:8000/api';
+// Vite exposes env vars prefixed with VITE_; fallback to Render for production
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ev-charging-simulator-1.onrender.com/api';
+
+/** Get WebSocket URL from API base (e.g. http://localhost:8000/api -> ws://localhost:8000/ws) */
+export function getWebSocketUrl() {
+  const url = new URL(API_BASE_URL);
+  const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${url.host}/ws`;
+}
+
+export { API_BASE_URL };
 
 export const apiService = {
   // Get network data

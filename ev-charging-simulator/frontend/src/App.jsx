@@ -1,6 +1,7 @@
 // App.js - COMPLETE VERSION WITH SCROLLING FIX
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Battery, Zap, MapPin, Navigation, Clock, Car, AlertCircle, MessageSquare, Send, X, Wifi, Users, Target, ZoomIn, ZoomOut, Move } from 'lucide-react';
+import { API_BASE_URL, getWebSocketUrl } from './services/api';
 
 // Throttle function to limit how often a function can be called
 const throttle = (func, limit) => {
@@ -50,7 +51,7 @@ useEffect(() => {
   // Fetch active route when a station is selected
   useEffect(() => {
     if (selectedStation) {
-      fetch(`https://ev-charging-simulator-1.onrender.com/api/active-route/${selectedStation.id}`)
+      fetch(`${API_BASE_URL}/active-route/${selectedStation.id}`)
         .then(response => response.json())
         .then(data => {
           setActiveRoute(data);
@@ -1289,9 +1290,7 @@ const EVChargingApp = () => {
       });
     }, 100);
 
-    const wsHost = process.env.REACT_APP_WS_HOST || 'ev-charging-simulator-1.onrender.com';
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const websocket = new WebSocket(`${wsProtocol}://${wsHost}/ws`);
+    const websocket = new WebSocket(getWebSocketUrl());
     
     websocket.onopen = () => {
       console.log('WebSocket connected');
@@ -1332,8 +1331,8 @@ const EVChargingApp = () => {
     const fetchInitialData = async () => {
       try {
         const [networkResponse, recommendationsResponse] = await Promise.all([
-          fetch('https://ev-charging-simulator-1.onrender.com/api/network'),
-          fetch('https://ev-charging-simulator-1.onrender.com/api/recommendations')
+          fetch(`${API_BASE_URL}/network`),
+          fetch(`${API_BASE_URL}/recommendations`)
         ]);
 
         const [networkData, recommendationsData] = await Promise.all([
@@ -1356,7 +1355,7 @@ const EVChargingApp = () => {
 
   const handleLocationSelect = async (nodeId) => {
     try {
-      const response = await fetch('https://ev-charging-simulator-1.onrender.com/api/set-location', {
+      const response = await fetch(`${API_BASE_URL}/set-location`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1392,7 +1391,7 @@ const EVChargingApp = () => {
     setUserInput('');
     
     try {
-      const response = await fetch('https://ev-charging-simulator-1.onrender.com/api/chat', {
+      const response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

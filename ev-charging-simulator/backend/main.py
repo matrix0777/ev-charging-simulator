@@ -1,6 +1,7 @@
 # main.py - IMPROVED AI NAVIGATOR WITH OPTIMAL STATION SELECTION
 import asyncio
 import json
+import os
 import random
 import time
 import math
@@ -486,9 +487,16 @@ class SmartRoutingAI:
 # FastAPI Application
 app = FastAPI(title="EV Charging Station Simulation")
 
+# CORS: set ALLOWED_ORIGINS on Render to your Vercel URL (e.g. https://your-app.vercel.app)
+_origins = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000"
+)
+_cors_origins = [o.strip() for o in _origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

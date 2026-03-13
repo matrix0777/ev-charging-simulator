@@ -24,6 +24,26 @@ A real-time AI-powered EV charging station simulation with smart routing recomme
 - Tailwind CSS
 - Lucide Icons
 
+## Deployment (Backend on Render, Frontend on Vercel)
+
+Add these in each dashboard so the frontend can call the backend and CORS allows it.
+
+### Render (backend)
+
+| Key | Value |
+|-----|--------|
+| `ALLOWED_ORIGINS` | Your Vercel app URL, e.g. `https://your-app.vercel.app`. Multiple origins: `https://your-app.vercel.app,http://localhost:3000` |
+
+Then redeploy the service.
+
+### Vercel (frontend)
+
+| Key | Value |
+|-----|--------|
+| `VITE_API_BASE_URL` | Only if your backend URL is different from the default. Example: `https://your-backend.onrender.com/api` |
+
+If you use the default backend (`ev-charging-simulator-1.onrender.com`), you don’t need to set anything. Redeploy after changing env vars.
+
 ## Quick Start
 
 ### Prerequisites
